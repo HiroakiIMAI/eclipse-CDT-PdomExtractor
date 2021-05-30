@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <extension
+         point="org.eclipse.ui.actionSets">
+      <actionSet
+            id="PdomExtractor.actionSet1"
+            label="%actionSet.label">
+         <action
+               class="pdomextractor.PdomExtractorMain"
+               id="PdomExtractor.action1"
+               label="%action.label"
+               style="push"
+               toolbarPath="PdomExtractor.Act1">
+         </action>
+      </actionSet>
+   </extension>
+
+</plugin>
