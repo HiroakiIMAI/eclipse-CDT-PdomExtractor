@@ -12,6 +12,7 @@ import org.eclipse.cdt.core.model.ISourceEntry;
 import org.eclipse.cdt.core.model.ITranslationUnit;
 import org.eclipse.cdt.core.parser.util.ASTPrinter;
 import org.eclipse.cdt.internal.core.model.CElement;
+import org.eclipse.cdt.internal.ui.editor.CDocumentProvider;
 import org.eclipse.cdt.internal.ui.editor.CEditor;
 import org.eclipse.cdt.internal.ui.text.CWordFinder;
 import org.eclipse.cdt.ui.ICEditor;
@@ -26,6 +27,7 @@ import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.text.Document;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.IRegion;
 import org.eclipse.jface.text.ITextSelection;
@@ -51,9 +53,29 @@ import org.eclipse.ui.texteditor.ITextEditor;
 //import org.w3c.dom.Document;
 
 
+
+
+
+
+
+
+
+
+
+
+
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,6 +83,87 @@ import javafx.scene.Node;
 
 public class PdomExtractorMain implements IWorkbenchWindowActionDelegate {
 
+
+	/** ************************************************************************************
+	 * @brief InputStream -> String
+	 * 
+	 ***************************************************************************************/
+	public static String readAll(InputStream in) throws IOException {
+	    byte[] b = new byte[1024];
+	    ByteArrayOutputStream out = new ByteArrayOutputStream();
+	    int len;
+	    while ((len = in.read(b)) != -1) {
+	        out.write(b, 0, len);
+	    }
+	    return out.toString();
+	}
+	
+	/** ************************************************************************************
+	 * @brief ツールバーボタン押下時処理　サブルーチン
+	 * 
+	 ***************************************************************************************/
+	public ArrayList<String> GerRequestFileLines() {
+		ArrayList<String> retList = new ArrayList<String>();
+		File requestFile = new File("request.txt");
+		if (!requestFile.exists())
+		{
+			System.out.println( "request.txt is not exist." );
+		}
+		else
+		{
+			BufferedReader reader = null;
+			try 
+			{
+				reader = new BufferedReader(
+							new InputStreamReader(
+								new FileInputStream(requestFile), 
+								"UTF-8"
+							)
+						);
+				
+				String line;
+				while((line = reader.readLine()) != null) 
+				{
+					// ファイルから読みだした文字列をArrayListに詰める
+					retList.add(line);
+				}
+			} 
+			catch (FileNotFoundException e) 
+			{
+				System.out.println( "cannot open request.txt" );
+				e.printStackTrace();
+			} 
+			catch (UnsupportedEncodingException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} 
+			catch (IOException e) 
+			{
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			finally
+			{
+				if (reader != null)
+				{
+					try {
+						reader.close();
+					} catch (IOException e) {
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+				}
+			}
+		}
+		
+		return retList;
+	}
+
+	
+	/** ************************************************************************************
+	 * @brief ツールバーボタン押下時メインアクション
+	 * 
+	 ***************************************************************************************/
 	public void run(IAction action) {
 		
 		//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -113,19 +216,81 @@ public class PdomExtractorMain implements IWorkbenchWindowActionDelegate {
 			try{
 				IASTTranslationUnit astTrsUnit = actTrsUnit.getAST();
 				
-				System.out.println( "start" );
 				// デバッグ出力
-				File AstPrintFile = new File( "AstPrint.txt" );								// 出力ファイル生成
-				PrintStream AstPrintStream = new PrintStream( AstPrintFile );				// ファイルへのストリームを生成
-				//ASTPrinter.print(astTrsUnit, AstPrintStream);  //System.out);				//　ストリームにASTNodeを書き出す
-				AstPrintStream.close();
+//				System.out.println( "start" );
+//				File AstPrintFile = new File( "AstPrint.txt" );								// 出力ファイル生成
+//				PrintStream AstPrintStream = new PrintStream( AstPrintFile );				// ファイルへのストリームを生成
+//				ASTPrinter.print(astTrsUnit, AstPrintStream);  //System.out);				//　ストリームにASTNodeを書き出す
+//				AstPrintStream.close();
 				
 				// PdomExtractorのメイン処理を実施する
 				PDEVizTreeClass vizTree = new PDEVizTreeClass( astTrsUnit, doc ,astTrsUnit.getComments() );
 				// PdomExtractorの解析結果をxmlに書き出す
 				System.out.println( "xml" );
 				vizTree.printXml( "PdomExtracted.xml" );
-			}catch( Exception e )
+				
+				
+				//------------------------------------------------------------------------
+				// request.txt に記載されたファイル一覧に対して同様の処理を実施する。
+				//------------------------------------------------------------------------
+				ArrayList<String> lines = GerRequestFileLines();
+				for( String line : lines )
+				{
+
+					// 一般化Eclipseソースファイル情報の取得
+					IPath		reqSrcPath	= new Path( line );
+					IFile		reqSrcFile	= workspaceRoot.getFile( reqSrcPath );
+					IProject	reqPrj		= reqSrcFile.getProject();
+					
+					String str = new String();
+					str = readAll( reqSrcFile.getContents() );
+					IDocument	reqDoc 	= new Document( str );
+
+					
+					// C/C++特化ソースファイル情報の取得
+					ICModel				reqCModel	= CoreModel.create(workspaceRoot);
+					ICProject			reqCPrj		= reqCModel.getCProject( reqPrj.getName() );
+					ICElement			reqCSrcElem = reqCPrj.findElement( reqSrcFile.getProjectRelativePath() );  // this apparently throws exception for non-source files instead of returning null
+					
+					
+					if( !( reqCSrcElem instanceof ITranslationUnit) )
+					{
+						MessageDialog.openInformation(
+						        null,
+						        "error",
+						        line + " is not an instance of TranslationUnit"
+						        );
+						return;
+					}
+					ITranslationUnit reqTrsUnit	= (ITranslationUnit)reqCSrcElem;  // not clear whether we need to check for null or instanceof
+					MessageDialog.openInformation(
+					        null,
+					        "createCProject",
+					        "line = " + line + "\n"
+					        + "reqCPrjName = " + reqCPrj.getElementName() + "\n"
+					        + "reqTrsUnit = " + reqTrsUnit.getElementName() + "\n"
+					        );
+					
+					// ASTの取得
+					IASTTranslationUnit reqTrsUnitAST = reqTrsUnit.getAST();
+
+					// PdomExtractorのメイン処理を実施する
+					PDEVizTreeClass reqVizTree = new PDEVizTreeClass( reqTrsUnitAST, reqDoc ,reqTrsUnitAST.getComments() );
+					// PdomExtractorの解析結果をxmlに書き出す
+					line = line.substring( line.lastIndexOf("/")+1 );
+					System.out.println( "PdomExtracted_" + line + ".xml" );
+					reqVizTree.printXml( "PdomExtracted_" + line + ".xml" );
+
+					
+
+					
+
+				}
+
+				
+				
+			}
+			catch( Exception e )
 			{
 				
 			}
@@ -146,6 +311,7 @@ public class PdomExtractorMain implements IWorkbenchWindowActionDelegate {
 		
 		// TODO Auto-generated method stub
 	}
+	
 
 	public void selectionChanged(IAction action, ISelection selection) {
 		// TODO Auto-generated method stub
