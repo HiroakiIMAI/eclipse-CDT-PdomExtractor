@@ -35,7 +35,6 @@ public class PDEVizPartsClass {
 	 
 	PDEVizPartsClass( IASTNode node, IDocument doc, IASTComment[] comments, int lNum_CmSt, int lNum_CmEd )
 	{
-		System.out.println( "PDEVizPartsClass start" );
 
 		// ƒƒ“ƒo•Ï”‚Ì‰Šú‰»
 		inlineComment  = "";
@@ -165,7 +164,6 @@ public class PDEVizPartsClass {
 			}
 		}
 		
-		System.out.println( "extract nodeText" );
 		//----------------------------------------
 		// nodeText‚ğ’Šo‚·‚é
 		//----------------------------------------
@@ -187,11 +185,7 @@ public class PDEVizPartsClass {
 			}
 		}
 		
-		System.out.println( "comgpooundCheck OK" );
-		
-		System.out.println( "IASTFileLocation nodeLoc = node.getFileLocation();" );
 		IASTFileLocation nodeLoc = node.getFileLocation();		
-		System.out.println( "IASTFileLocation nodeLoc = node.getFileLocation() OK;" );
 		
 		//-----------------------
 		// Try to extract NodeText
@@ -238,7 +232,6 @@ public class PDEVizPartsClass {
 		{
 			nodeText = "Couldn't get nodeText";
 		}
-		System.out.println( "nodeText OK" );
 		
 	}
 	

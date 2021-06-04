@@ -107,7 +107,6 @@ public class PDEVizTreeClass {
 						pdevNode.node = node;
 						pdevNode.vizParts = new PDEVizPartsClass(fncDef, doc, commentsScreaned, 0, fncDef.getFileLocation().getStartingLineNumber());
 						
-						System.out.println( " self node is created" );
 						
 						// ”z‰º‚ÌCompound‚ÌTree‰»
 						for( IASTNode fncDefChild : fncDef.getChildren() )

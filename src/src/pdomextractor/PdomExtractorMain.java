@@ -16,6 +16,7 @@ import org.eclipse.cdt.internal.ui.editor.CDocumentProvider;
 import org.eclipse.cdt.internal.ui.editor.CEditor;
 import org.eclipse.cdt.internal.ui.text.CWordFinder;
 import org.eclipse.cdt.ui.ICEditor;
+import org.eclipse.core.internal.resources.Workspace;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
@@ -64,6 +65,9 @@ import org.eclipse.ui.texteditor.ITextEditor;
 
 
 
+
+
+
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -77,88 +81,12 @@ import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import javafx.scene.Node;
 
 public class PdomExtractorMain implements IWorkbenchWindowActionDelegate {
-
-
-	/** ************************************************************************************
-	 * @brief InputStream -> String
-	 * 
-	 ***************************************************************************************/
-	public static String readAll(InputStream in) throws IOException {
-	    byte[] b = new byte[1024];
-	    ByteArrayOutputStream out = new ByteArrayOutputStream();
-	    int len;
-	    while ((len = in.read(b)) != -1) {
-	        out.write(b, 0, len);
-	    }
-	    return out.toString();
-	}
-	
-	/** ************************************************************************************
-	 * @brief ツールバーボタン押下時処理　サブルーチン
-	 * 
-	 ***************************************************************************************/
-	public ArrayList<String> GerRequestFileLines() {
-		ArrayList<String> retList = new ArrayList<String>();
-		File requestFile = new File("request.txt");
-		if (!requestFile.exists())
-		{
-			System.out.println( "request.txt is not exist." );
-		}
-		else
-		{
-			BufferedReader reader = null;
-			try 
-			{
-				reader = new BufferedReader(
-							new InputStreamReader(
-								new FileInputStream(requestFile), 
-								"UTF-8"
-							)
-						);
-				
-				String line;
-				while((line = reader.readLine()) != null) 
-				{
-					// ファイルから読みだした文字列をArrayListに詰める
-					retList.add(line);
-				}
-			} 
-			catch (FileNotFoundException e) 
-			{
-				System.out.println( "cannot open request.txt" );
-				e.printStackTrace();
-			} 
-			catch (UnsupportedEncodingException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} 
-			catch (IOException e) 
-			{
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-			finally
-			{
-				if (reader != null)
-				{
-					try {
-						reader.close();
-					} catch (IOException e) {
-						// TODO Auto-generated catch block
-						e.printStackTrace();
-					}
-				}
-			}
-		}
-		
-		return retList;
-	}
-
 	
 	/** ************************************************************************************
 	 * @brief ツールバーボタン押下時メインアクション
@@ -168,150 +96,271 @@ public class PdomExtractorMain implements IWorkbenchWindowActionDelegate {
 		
 		//>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 		// sequence to get TranslationUnit 
-		ITranslationUnit 	actTrsUnit;
 		//-------------------------------
 		// get active editor
 		//-------------------------------
 		IWorkbenchPage wrkBnchWndPage = PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage();
 		IEditorPart actEditor = wrkBnchWndPage.getActiveEditor();
 		ITextEditor actTxtEditor = (ITextEditor)actEditor;
+		
+		//-------------------------------
+		// get Document related to active editor
+		//-------------------------------
 		IDocument doc = actTxtEditor.getDocumentProvider().getDocument(actTxtEditor.getEditorInput());
+		
 		//-------------------------------
 		// get resources related to active editor
 		//-------------------------------
 		IWorkspaceRoot workspaceRoot = ResourcesPlugin.getWorkspace().getRoot();
-		IPath		actSrcPath	= new Path( actEditor.getTitleToolTip() );
-		IFile		actSrcFile	= workspaceRoot.getFile( actSrcPath );
-		IProject	actPrj		= actSrcFile.getProject();
+		EclipseDomResources domRsrc = new EclipseDomResources( workspaceRoot, actEditor.getTitleToolTip() );
+
+		
 		//-------------------------------
 		// get CModel of active resources
 		//-------------------------------
-		try{
-			ICModel				cModel		= CoreModel.create(workspaceRoot);
-			ICProject			actCPrj		= cModel.getCProject( actPrj.getName() );
-			ICElement			actCSrcElem = actCPrj.findElement( actSrcFile.getProjectRelativePath() );  // this apparently throws exception for non-source files instead of returning null
-			if( !( actCSrcElem instanceof ITranslationUnit) )
-			{
-				MessageDialog.openInformation(
-				        null,
-				        "error",
-				        "this source is not an instance of TranslationUnit"
-				        );
-				return;
-			}
-			actTrsUnit	= (ITranslationUnit)actCSrcElem;  // not clear whether we need to check for null or instanceof
+		CModelObjects CMdl = new CModelObjects( workspaceRoot, domRsrc.prj, domRsrc.srcFile );
+		IASTTranslationUnit astTrsUnit = CMdl.GetAST();
+		
+		// 解析対象のデバッグ出力
+		System.out.print(
+			"actSrcPath = " + domRsrc.srcPath.toString() + "\n"
+			+ "actCPrjName = " + CMdl.prj.getElementName() + "\n"
+			);
 
-			MessageDialog.openInformation(
-			        null,
-			        "createCProject",
-			        "actEditorToolTip = " + actEditor.getTitleToolTip() + "\n"
-			        + "actSrcPath = " + actSrcPath.toString() + "\n"
-			        + "actCPrjName = " + actCPrj.getElementName() + "\n"
-			        + "actTrsUnit = " + actTrsUnit.getElementName() + "\n"
-			        );
-			
-			//-------------------------------
-			// list up nodes
-			//->>>---------------------------
-			try{
-				IASTTranslationUnit astTrsUnit = actTrsUnit.getAST();
-				
-				// デバッグ出力
-//				System.out.println( "start" );
-//				File AstPrintFile = new File( "AstPrint.txt" );								// 出力ファイル生成
-//				PrintStream AstPrintStream = new PrintStream( AstPrintFile );				// ファイルへのストリームを生成
-//				ASTPrinter.print(astTrsUnit, AstPrintStream);  //System.out);				//　ストリームにASTNodeを書き出す
-//				AstPrintStream.close();
-				
-				// PdomExtractorのメイン処理を実施する
-				PDEVizTreeClass vizTree = new PDEVizTreeClass( astTrsUnit, doc ,astTrsUnit.getComments() );
-				// PdomExtractorの解析結果をxmlに書き出す
-				System.out.println( "xml" );
-				vizTree.printXml( "PdomExtracted.xml" );
-				
-				
-				//------------------------------------------------------------------------
-				// request.txt に記載されたファイル一覧に対して同様の処理を実施する。
-				//------------------------------------------------------------------------
-				ArrayList<String> lines = GerRequestFileLines();
-				for( String line : lines )
-				{
+		//-------------------------------
+		// PdomExtractorのメイン処理を実施する
+		//-------------------------------
+		PDEVizTreeClass vizTree = new PDEVizTreeClass( astTrsUnit, doc ,astTrsUnit.getComments() );
+		System.out.println( "PdomExtracted.xml" );
+		vizTree.printXml( "PdomExtracted.xml" );
 
-					// 一般化Eclipseソースファイル情報の取得
-					IPath		reqSrcPath	= new Path( line );
-					IFile		reqSrcFile	= workspaceRoot.getFile( reqSrcPath );
-					IProject	reqPrj		= reqSrcFile.getProject();
-					
-					String str = new String();
-					str = readAll( reqSrcFile.getContents() );
-					IDocument	reqDoc 	= new Document( str );
-
-					
-					// C/C++特化ソースファイル情報の取得
-					ICModel				reqCModel	= CoreModel.create(workspaceRoot);
-					ICProject			reqCPrj		= reqCModel.getCProject( reqPrj.getName() );
-					ICElement			reqCSrcElem = reqCPrj.findElement( reqSrcFile.getProjectRelativePath() );  // this apparently throws exception for non-source files instead of returning null
-					
-					
-					if( !( reqCSrcElem instanceof ITranslationUnit) )
-					{
-						MessageDialog.openInformation(
-						        null,
-						        "error",
-						        line + " is not an instance of TranslationUnit"
-						        );
-						return;
-					}
-					ITranslationUnit reqTrsUnit	= (ITranslationUnit)reqCSrcElem;  // not clear whether we need to check for null or instanceof
-					MessageDialog.openInformation(
-					        null,
-					        "createCProject",
-					        "line = " + line + "\n"
-					        + "reqCPrjName = " + reqCPrj.getElementName() + "\n"
-					        + "reqTrsUnit = " + reqTrsUnit.getElementName() + "\n"
-					        );
-					
-					// ASTの取得
-					IASTTranslationUnit reqTrsUnitAST = reqTrsUnit.getAST();
-
-					// PdomExtractorのメイン処理を実施する
-					PDEVizTreeClass reqVizTree = new PDEVizTreeClass( reqTrsUnitAST, reqDoc ,reqTrsUnitAST.getComments() );
-					// PdomExtractorの解析結果をxmlに書き出す
-					line = line.substring( line.lastIndexOf("/")+1 );
-					System.out.println( "PdomExtracted_" + line + ".xml" );
-					reqVizTree.printXml( "PdomExtracted_" + line + ".xml" );
-
-					
-
-					
-
-				}
-
-				
-				
-			}
-			catch( Exception e )
-			{
-				
-			}
-			//-<<<---------------------------
-		} 
-		catch( CModelException e ){
-			MessageDialog.openInformation(
-			        null,
-			        "exception in creating CModel",
-			        "selected source is not a CElement"
-			        );
-		}
 		// sequence to get TranslationUnit 
 		//<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 		
 		
-		
-		
-		// TODO Auto-generated method stub
+		//------------------------------------------------------------------------
+		// request.txt に記載されたファイル一覧に対して同様の処理を実施する。
+		//------------------------------------------------------------------------
+		ArrayList<String> requests = GerRequestFileLines();
+		for( String reqFileName : requests )
+		{
+			//-------------------------------
+			// get resources requested
+			//-------------------------------
+			// 一般化Eclipseソースファイル情報の取得
+			EclipseDomResources reqDomRsrc = new EclipseDomResources( workspaceRoot, reqFileName );
+			String str = new String();
+			try 
+			{
+				str = GetEncodedString_FromInputStream( reqDomRsrc.srcFile.getContents() );
+			} 
+			catch (Exception e) 
+			{
+				e.printStackTrace();
+				return;
+			}
+			
+			//-------------------------------
+			// get Document
+			//-------------------------------
+			IDocument	reqDoc 	= new Document( str );
+			
+			//-------------------------------
+			// get CModel of resources
+			//-------------------------------
+			// C/C++特化ソースファイル情報の取得
+			CModelObjects reqCMdl = new CModelObjects(workspaceRoot, reqDomRsrc.prj, reqDomRsrc.srcFile);
+			IASTTranslationUnit reqTrsUnitAST	= reqCMdl.GetAST();
+
+			// 解析対象のデバッグ出力
+			System.out.print(
+				"reqSrcPath = " + reqDomRsrc.srcPath.toString() + "\n"
+				+ "reqCPrjName = " + reqCMdl.prj.getElementName() + "\n"
+				);
+			
+			//-------------------------------
+			// PdomExtractorのメイン処理を実施する
+			//-------------------------------
+			PDEVizTreeClass reqVizTree = new PDEVizTreeClass( reqTrsUnitAST, reqDoc ,reqTrsUnitAST.getComments() );
+			reqFileName = reqFileName.substring( reqFileName.lastIndexOf("/")+1 );
+			System.out.println( "PdomExtracted_" + reqFileName + ".xml" );
+			reqVizTree.printXml( "PdomExtracted_" + reqFileName + ".xml" );
+		}
 	}
 	
+	
+	/** ************************************************************************************
+	 * @brief Eclipse Document Resource Objects Class
+	 * 
+	 * [機能概要]
+	 * Eclipse の  一般的なファイルリソースを扱うオブジェクトをまとめたクラス
+	 * 
+	 ***************************************************************************************/
+	class EclipseDomResources
+	{
+		IPath		srcPath;
+		IFile		srcFile;
+		IProject	prj;
+		
+		EclipseDomResources( IWorkspaceRoot wsRoot, String fileName )
+		{
+			srcPath	= new Path( fileName );
+			srcFile	= wsRoot.getFile( srcPath );
+			prj		= srcFile.getProject();
+		}
+	}
+	
+	
+	
+	/** ************************************************************************************
+	 * @brief Eclipse C/C++ Document Model Objects Class
+	 * 
+	 * [機能概要]
+	 * Eclipse の C/C++ に特化したドキュメントオブジェクトモデルをまとめたクラス
+	 * 
+	 ***************************************************************************************/
+	class CModelObjects
+	{
+		ICModel				model;
+		ICProject			prj;
+		ICElement			srcElem;
+		
+		CModelObjects( IWorkspaceRoot wsRoot, IProject iprj, IFile srcFile )
+		{
+			try
+			{
+				model		= CoreModel.create(wsRoot);
+				prj			= model.getCProject( iprj.getName());
+				srcElem		= prj.findElement( srcFile.getProjectRelativePath() );  // this apparently throws exception for non-source files instead of returning null
+			}
+			catch( Exception e )
+			{
+				e.printStackTrace();
+			}
+		}
+		
+		
+		public IASTTranslationUnit GetAST()
+		{
+			if( !( srcElem instanceof ITranslationUnit) )
+			{
+				MessageDialog.openInformation(
+				        null,
+				        "error",
+				        srcElem.getElementName() + " is not an instance of TranslationUnit"
+				        );
+			}
+			
+			try 
+			{
+				return ((ITranslationUnit)srcElem).getAST();
+			} 
+			catch (CoreException e)
+			{
+				e.printStackTrace();
+				return null;
+			}
+		}
+	}
+	
+	
+	
+	/** ************************************************************************************
+	 * @brief ストリーム→文字列変換処理
+	 * 
+	 * [機能概要]
+	 * InputStreamを受けて、エンコードを考慮してStringに変換する。
+	 * 対応文字コードはS-JISとUTF-8。
+	 * 
+	 ***************************************************************************************/
+	public static String GetEncodedString_FromInputStream(InputStream in) throws IOException {
+		// バイトストリームを用意する
+		byte[] b = new byte[1024];
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		int len;
+		// 引数で受けたストリームの全行をバイトストリームに渡す
+		while ((len = in.read(b)) != -1) {
+		    out.write(b, 0, len);
+		}
+		
+		// バイトストリームの内容を各文字コードのエンコード済みStringに変換する
+		byte[] bytes = out.toByteArray();
+		System.out.println( "size:" + bytes.length );
+		String str_u = new String( bytes, "UTF-8" );
+		String str_s = new String( bytes, "Shift_JIS" );
+		
+		//------------------------------------------------------------------
+		// エンコード済StringをByte列に復元し、元の引数ストリームから得たバイト列に一致する場合、
+		// エンコードに用いた文字コードが適合すると判断し、エンコード済Stringを返す。
+		//------------------------------------------------------------------
+		// UTF-8 適合チェック
+		if( Arrays.equals( bytes, str_u.getBytes("UTF-8") ) )
+		{
+			System.out.println( " *** UTF-8 File Detected!!! *** " );
+			return str_u;
+		}
+		// S-JIS 適合チェック
+		if( Arrays.equals( bytes, str_s.getBytes("Shift_JIS") ) )
+		{
+			System.out.println( " *** Shift_JIS File Detected!!! *** " );
+			return str_s;
+		}
+		return out.toString();
+	}
+	
+	
+	
+	/** ************************************************************************************
+	 * @brief request.txt 読出し処理
+	 * 
+	 * [機能概要]
+	 * request.txtを開き、各行をセットしたString配列を返す。
+	 * 
+	 ***************************************************************************************/
+	public ArrayList<String> GerRequestFileLines() {
+		ArrayList<String> retList = new ArrayList<String>();
+		File requestFile = new File("request.txt");
+		
+		// ファイルの存在チェック
+		if (!requestFile.exists())
+		{
+			// エラー処理
+			System.out.println( "request.txt is not exist." );
+		}
+		else
+		{
+			// ファイルが存在する場合
+			BufferedReader reader = null;
+			// バッファ読出し処理
+			try 
+			{
+				// readerオブジェクトの生成
+				reader = new BufferedReader(
+							new InputStreamReader(
+								new FileInputStream(requestFile), 
+								"UTF-8"
+							)
+						);
+				
+				// 全行読出し処理
+				String line;
+				while((line = reader.readLine()) != null) 
+				{
+					// ファイルから読みだした文字列をArrayListに詰める
+					retList.add(line);
+				}
+			} 
+			// バッファ操作の例外処理
+			catch (Exception e) 
+			{
+				
+				System.out.println( "cannot open request.txt" );
+				e.printStackTrace();
+			} 
+		}
+		return retList;
+	}
+
 
 	public void selectionChanged(IAction action, ISelection selection) {
 		// TODO Auto-generated method stub
