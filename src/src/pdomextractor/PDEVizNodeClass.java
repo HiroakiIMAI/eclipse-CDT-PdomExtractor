@@ -8,6 +8,7 @@ import org.eclipse.cdt.core.dom.ast.IASTComment;
 import org.eclipse.cdt.core.dom.ast.IASTCompoundStatement;
 import org.eclipse.cdt.core.dom.ast.IASTFileLocation;
 import org.eclipse.cdt.core.dom.ast.IASTFunctionDefinition;
+import org.eclipse.cdt.core.dom.ast.IASTIfStatement;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IASTStatement;
 import org.eclipse.cdt.internal.ui.editor.CDocumentProvider;
@@ -19,6 +20,7 @@ import org.eclipse.core.internal.resources.Workspace;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.FileLocator;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.jface.text.Document;
 import org.eclipse.jface.text.IDocument;
@@ -57,8 +59,6 @@ public class PDEVizNodeClass {
 				int i = j-1; // prev
 				int k = j+1; // next
 							
-				IASTNode iastNode = children[j];
-				
 				//----------------------------------------------------------------------------------
 				// nodeに関連するコメントの抽出範囲行数を取得する
 				//----------------------------------------------------------------------------------
@@ -87,41 +87,188 @@ public class PDEVizNodeClass {
 				//----------------------------------------------------------------------------------
 				// 表示ノード　PDEVizNodeClass　インスタンスを作成
 				//----------------------------------------------------------------------------------
-				PDEVizNodeClass curNode = new PDEVizNodeClass();
-				curNode.node = iastNode;
-				curNode.vizParts = new PDEVizPartsClass(iastNode, doc, comments, lNum_prvNd, lNum_nxtNd);
+				IASTNode iastNode = children[j];
 				
 				//----------------------------------------------------------------------------------
-				// 子ノードへの再帰処理
+				// ノード種別による特別処理
 				//----------------------------------------------------------------------------------
-				// statementが子要素にCompoundStatementを持つ場合、
-				// CompoundStatement以下に含まれるStatement群をvisTreeの分枝として登録したいので、
-				// createPDEVisTree()を再帰呼び出しする。
-				for( IASTNode statementChid : iastNode.getChildren() )
+				// if Statement だった場合、 if, if-else, if-elseif の構造に対応するために特別処理を実施する
+				// 
+				// [Eclipse CDT AST仕様]
+				// if-else構造の場合、AST内でelse節はStatementノードを持たない。
+				// 代わりにif節が2つのCompoundを持ち、2つ目のCompoundがelseの内容を保持する
+				// 
+				// if-elseif 構造の場合、AST内ではIfStatementが直下にIfStatementを持ち、
+				// これがelseif節を表現する。よって、elseifの度に、ASTの階層は1つ深くなる。
+				// 
+				// [PDEの出力仕様]
+				// if-else構造の場合、else節のStatementをifと同じ階層に出力する。
+				// Statementノードの内容はとりあえず適当に作っておく
+				// 
+				// if-elseif構造の場合、elseif節のStatementをifと同じ階層に出力する。
+				// AST上でifStatementの直下にあるelseif相当のifStatementにelseifである情報を付加して
+				// 先頭のifStatementと同じ階層に移動させる。
+				//----------------------------------------------------------------------------------
+				if( iastNode instanceof IASTIfStatement )
 				{
-					if( statementChid instanceof IASTCompoundStatement )
+					IASTIfStatement ifNode = (IASTIfStatement)iastNode;
+					
+					// if節を表現するPDEノードを生成する
+					PDEVizNodeClass pdeIfNode = new PDEVizNodeClass();
+					pdeIfNode.node = ifNode;							// nodeはとりあえずifNodeを設定しておく
+					pdeIfNode.vizParts = new PDEVizPartsClass(ifNode, doc, comments, lNum_prvNd, lNum_nxtNd);
+
+					// if節のCompoundをノード化するための再帰する
+					pdeIfNode.children = createPDEVizNodeTree(ifNode.getThenClause(), doc, comments);
+
+					// if節のPDEノードをインスタンスをリストにtopNodeレイヤーのPDEノードリストに追加
+					vizTree.add( pdeIfNode );
+					
+					// else, else if の存在チェック
+					if( null != ifNode.getElseClause() )
 					{
-						curNode.children = createPDEVizNodeTree(statementChid, doc, comments);
+						IASTStatement elseClause = ifNode.getElseClause();
+						if( elseClause instanceof IASTIfStatement )
+						{
+							TreatElseIfNode( vizTree, (IASTIfStatement)elseClause, doc, comments );
+						}
+						else
+						{	
+							TreatElseClause(vizTree, (IASTCompoundStatement)elseClause, doc, comments);
+						}
 					}
 				}
-				
 				//----------------------------------------------------------------------------------
-				// 表示ノード　PDEVizNodeClass　インスタンスをリストに保持
+				// その他の一般的なnodeの場合
 				//----------------------------------------------------------------------------------
-				vizTree.add( curNode );
+				else
+				{
+					PDEVizNodeClass curNode = new PDEVizNodeClass();
+					curNode.node = iastNode;
+					curNode.vizParts = new PDEVizPartsClass(iastNode, doc, comments, lNum_prvNd, lNum_nxtNd);
+					
+					//----------------------------------------------------------------------------------
+					// 子ノードへの再帰処理
+					//----------------------------------------------------------------------------------
+					// topNode直下のnode自身がCompoundStatementである場合、
+					// その子要素に含まれるStatement群をvisTreeの分枝として登録したいので、
+					// CompoundStatementをtopNodeとして再帰呼び出しする。
+					if( iastNode instanceof IASTCompoundStatement )
+					{
+						System.out.println( "recurrent :C" );
+						curNode.children = createPDEVizNodeTree(iastNode, doc, comments);
+						
+					}
+					// topNode直下のnode自身がCompoundStatementでない場合
+					else
+					{
+						// statementが子要素にCompoundStatementを持つ場合、
+						// CompoundStatement以下に含まれるStatement群をvisTreeの分枝として登録したいので、
+						// createPDEVisTree()を再帰呼び出しする。
+						for( IASTNode statementChid : iastNode.getChildren() )
+						{
+							if( statementChid instanceof IASTCompoundStatement )
+							{
+								System.out.println( "recurrent :N" );
+								curNode.children = createPDEVizNodeTree(statementChid, doc, comments);
+							}
+						}
+					}
+					
+					//----------------------------------------------------------------------------------
+					// 表示ノード　PDEVizNodeClass　インスタンスをリストに保持
+					//----------------------------------------------------------------------------------
+					vizTree.add( curNode );
+				}
 			}
 			//----------------------------------------------------------------------------------
 			// Catch failure to convert child item to pdevNode
 			//----------------------------------------------------------------------------------
 			catch ( Exception e )
 			{
-				
+				e.printStackTrace();
 			}
 		}
 
 		return vizTree;
 	}
 	
+
+	/** ************************************************************************************
+	 * @brief if-else ノードのelse側処理
+	 * 
+	 ***************************************************************************************/
+	static void TreatElseClause( ArrayList<PDEVizNodeClass> vizTree, IASTCompoundStatement elseClause, IDocument doc ,IASTComment[] comments )
+	{
+		// if-else 構造への対応
+		System.out.println( "else Detected" );
+		IASTFileLocation nodeLoc = elseClause.getFileLocation();
+		TextSelection selNodeTxt = 
+				new TextSelection(
+				doc, 
+				nodeLoc.getNodeOffset(), 
+				nodeLoc.getNodeLength()
+				);
+		System.out.println( selNodeTxt.toString() );
+		PDEVizNodeClass pdeElseNode = new PDEVizNodeClass();
+		pdeElseNode.vizParts = new PDEVizPartsClass(elseClause, doc, comments, 0, 0);
+		pdeElseNode.vizParts.blockComment = "";
+		pdeElseNode.vizParts.inlineComment = "";
+		pdeElseNode.vizParts.nodeText = "else";
+		pdeElseNode.vizParts.pdeNodeType = "PdeElseStatement";
+		
+		// else節のCompoundをノード化するための再帰する
+		pdeElseNode.children = createPDEVizNodeTree(elseClause, doc, comments);
+		
+		// else節のPDEノードをインスタンスをリストにtopNodeレイヤーのPDEノードリストに追加
+		vizTree.add( pdeElseNode );
+	}
+	
+	/** ************************************************************************************
+	 * @brief if-else if ノードの再帰処理
+	 * 
+	 ***************************************************************************************/
+	static void TreatElseIfNode( ArrayList<PDEVizNodeClass> vizTree, IASTIfStatement elifNode, IDocument doc ,IASTComment[] comments )
+	{
+		// if-else if 構造への対応
+		System.out.println( "else if Detected" );
+		IASTFileLocation nodeLoc = elifNode.getFileLocation();
+		TextSelection selNodeTxt = 
+				new TextSelection(
+				doc, 
+				nodeLoc.getNodeOffset(), 
+				nodeLoc.getNodeLength()
+				);
+		System.out.println( selNodeTxt.toString() );
+		
+		PDEVizNodeClass pdeElifNode = new PDEVizNodeClass();
+		pdeElifNode.node = elifNode;
+		pdeElifNode.vizParts = new PDEVizPartsClass(elifNode, doc, comments, 0, 0);
+		pdeElifNode.vizParts.nodeText = "else " + pdeElifNode.vizParts.nodeText;
+		pdeElifNode.vizParts.pdeNodeType = "PdeElifStatement";
+		
+		// elseif節のCompoundをノード化するための再帰する
+		pdeElifNode.children = createPDEVizNodeTree(elifNode.getThenClause(), doc, comments);
+		
+		// elseif節のPDEノードをインスタンスをif節と同レイヤーのPDEノードリストに追加
+		vizTree.add( pdeElifNode );
+		
+		// elseif節に更にElseClauseがある場合は再帰処理する。
+		if( null != elifNode.getElseClause() )
+		{
+			IASTStatement elseClause = elifNode.getElseClause();
+			// 次のelseif処理への再帰
+			if( elseClause instanceof IASTIfStatement )
+			{
+				TreatElseIfNode(vizTree, (IASTIfStatement)elseClause, doc, comments);
+			}
+			// 次のelse処理への再帰
+			else
+			{
+				TreatElseClause(vizTree, (IASTCompoundStatement)elseClause, doc, comments);
+			}
+		}
+	}
 	
 	
 	/****************************************************************************/
@@ -172,11 +319,7 @@ public class PDEVizNodeClass {
 		org.w3c.dom.Element elem = xml.createElement( "fncNode" );
 		elem.setAttribute( "NodeText", this.vizParts.nodeText);
 		elem.setAttribute("rnID", rId + nId);
-		if ( this.node != null ){	
-			elem.setAttribute("astNodeType", this.node.getClass().getSimpleName() );	
-		}else{
-			// 何もしない
-		}
+		elem.setAttribute("astNodeType", this.vizParts.pdeNodeType );
 		
 		// commentNodeを作成する
 		elem.setAttribute("inlineComment", this.vizParts.inlineComment );

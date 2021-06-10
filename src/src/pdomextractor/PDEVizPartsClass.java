@@ -13,6 +13,7 @@ import org.eclipse.cdt.core.dom.ast.IASTFieldReference;
 import org.eclipse.cdt.core.dom.ast.IASTFileLocation;
 import org.eclipse.cdt.core.dom.ast.IASTFunctionDefinition;
 import org.eclipse.cdt.core.dom.ast.IASTIdExpression;
+import org.eclipse.cdt.core.dom.ast.IASTIfStatement;
 import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
@@ -25,6 +26,7 @@ import org.eclipse.jface.text.TextSelection;
 public class PDEVizPartsClass {
 	
 	public IASTNode iastNode;
+	public String pdeNodeType;
 	public String nodeText;
 	public String inlineComment;
 	public String blockComment;
@@ -43,7 +45,7 @@ public class PDEVizPartsClass {
 		blockComments  = new ArrayList<IASTComment>();
 //		dataAccessMap = new HashMap<String, String>();
 		dataAccessMap = new HashMap<String, PDEVizDataAccessExpression>();
-		createDataAccessHashMap(doc, node);
+//		createDataAccessHashMap(doc, node);
 		
 		try 
 		{
@@ -51,6 +53,7 @@ public class PDEVizPartsClass {
 			// StatementNodeを保持する
 			//----------------------------------------
 			this.iastNode = node;
+			this.pdeNodeType = node.getClass().getSimpleName();
 			
 			//----------------------------------------
 			// コメントを抽出する
@@ -185,17 +188,32 @@ public class PDEVizPartsClass {
 			}
 		}
 		
-		IASTFileLocation nodeLoc = node.getFileLocation();		
 		
 		//-----------------------
 		// Try to extract NodeText
 		//-----------------------
 		try
 		{
+			IASTFileLocation nodeLoc = node.getFileLocation();
+			TextSelection selNodeTxt;
+			
+			if( node instanceof IASTIfStatement )
+			{
+				IASTIfStatement ifNode = (IASTIfStatement) node;
+				nodeLoc = ifNode.getConditionExpression().getFileLocation();
+				selNodeTxt = 
+						new TextSelection(
+						doc, 
+						nodeLoc.getNodeOffset(), 
+						nodeLoc.getNodeLength()
+						);
+				
+				nodeText = "if (" + selNodeTxt.getText() + ")";
+			}
+			else
 			// 子要素にCompoundが含まれる場合は、
 			// inlineCommentが始まるまでをnodeTextとする。
 			// (現時点では、複数行にわたるif文などの正確な抽出は諦める)
-			TextSelection selNodeTxt;
 			if( flag_haveCompound )
 			{
 //				int extLength = nodeLoc.getNodeLength(); 
@@ -211,6 +229,7 @@ public class PDEVizPartsClass {
 						nodeLoc.getNodeOffset(), 
 						extLength
 						);
+				nodeText = new String( selNodeTxt.getText() );
 			}
 			// 子要素にCompoundが含まれない場合は、
 			// 単純にnodeTextを作成する。
@@ -222,8 +241,8 @@ public class PDEVizPartsClass {
 						nodeLoc.getNodeOffset(), 
 						nodeLoc.getNodeLength()
 						);
+				nodeText = new String( selNodeTxt.getText() );
 			}		
-			nodeText = new String( selNodeTxt.getText() );
 		}
 		//-----------------------
 		// Catch failure to extract NodeText

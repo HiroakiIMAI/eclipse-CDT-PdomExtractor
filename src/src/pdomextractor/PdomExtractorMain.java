@@ -127,6 +127,18 @@ public class PdomExtractorMain implements IWorkbenchWindowActionDelegate {
 			+ "actCPrjName = " + CMdl.prj.getElementName() + "\n"
 			);
 
+//		// ASTのデバッグ出力(EclipseCDT既存)
+//		try 
+//		{
+//			PrintStream ofs = new PrintStream( "AstPrint.txt", "UTF-8" );
+//			ASTPrinter.print(astTrsUnit, ofs);
+//			ofs.close();
+//		}
+//		catch (Exception e1) 
+//		{
+//			e1.printStackTrace();
+//		}
+
 		//-------------------------------
 		// PdomExtractorのメイン処理を実施する
 		//-------------------------------
