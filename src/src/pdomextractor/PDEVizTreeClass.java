@@ -19,6 +19,7 @@ import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IASTSimpleDeclaration;
 import org.eclipse.cdt.core.dom.ast.IASTTranslationUnit;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTNamespaceDefinition;
 import org.eclipse.jface.text.Document;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.ITextSelection;
@@ -94,33 +95,41 @@ public class PDEVizTreeClass {
 					// 関数宣言があれば内部の記述をPDEVisTreeとして構築する
 					//------------------------------------------------------------------
 					// nodeがFunctionDefinitionならば子要素にCompoundStatemnetを探す
-					if(node instanceof IASTFunctionDefinition )
-					{
-						IASTFunctionDefinition fncDef = (IASTFunctionDefinition) node;
+//					if(node instanceof IASTFunctionDefinition )
+//					{
+//						IASTFunctionDefinition fncDef = (IASTFunctionDefinition) node;
 						
 
 						//------------------------------------------------------------------
-						// FunctionDefinition自身と直下のCompoundStatemaneを表示Treeとしてrootリストに加える。
+						// node自身と直下のCompoundStatemaneを表示Treeとしてrootリストに加える。
 						//------------------------------------------------------------------
 						// 自身のnode化
 						PDEVizNodeClass pdevNode = new PDEVizNodeClass();
 						pdevNode.node = node;
-						pdevNode.vizParts = new PDEVizPartsClass(fncDef, doc, commentsScreaned, 0, fncDef.getFileLocation().getStartingLineNumber());
+						pdevNode.vizParts = new PDEVizPartsClass(node, doc, commentsScreaned, 0, node.getFileLocation().getStartingLineNumber());
 						
-						
-						// 配下のCompoundのTree化
-						for( IASTNode fncDefChild : fncDef.getChildren() )
+						// NameSpaceの特別処理
+						if( node instanceof CPPASTNamespaceDefinition )
 						{
-							if(fncDefChild instanceof IASTCompoundStatement)
+							// node直下の子要素を表示Treeに加える。
+							pdevNode.children = PDEVizNodeClass.createPDEVizNodeTree( node, document, commentsScreaned );
+						}
+						// NameSpaceでない一般ノードの処理
+						else
+						{
+							// 直下のCompoundに含まれる子要素のTree化
+							for( IASTNode child : node.getChildren() )
 							{
-								IASTCompoundStatement compound = (IASTCompoundStatement) fncDefChild;
-								// FunctionDefinition直下のCompoundStatemaneを表示Treeに加える。
-								pdevNode.children = PDEVizNodeClass.createPDEVizNodeTree( compound, document, commentsScreaned );
-								
+								if( child instanceof IASTCompoundStatement) 
+								{
+									// 子要素を表示Treeに加える。
+									pdevNode.children = PDEVizNodeClass.createPDEVizNodeTree( child, document, commentsScreaned );
+								}
 							}
 						}
+						
 						this.pdevTreeRoots.add(pdevNode);
-					}
+//					}
 				}
 			}
 			catch(Exception e)

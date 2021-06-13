@@ -11,6 +11,7 @@ import org.eclipse.cdt.core.dom.ast.IASTFunctionDefinition;
 import org.eclipse.cdt.core.dom.ast.IASTIfStatement;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IASTStatement;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTNamespaceDefinition;
 import org.eclipse.cdt.internal.ui.editor.CDocumentProvider;
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.filebuffers.ITextFileBuffer;
@@ -150,10 +151,11 @@ public class PDEVizNodeClass {
 					//----------------------------------------------------------------------------------
 					// 子ノードへの再帰処理
 					//----------------------------------------------------------------------------------
-					// topNode直下のnode自身がCompoundStatementである場合、
+					// topNode直下のnode自身がCompoundStatement or 名前空間である場合、
 					// その子要素に含まれるStatement群をvisTreeの分枝として登録したいので、
 					// CompoundStatementをtopNodeとして再帰呼び出しする。
-					if( iastNode instanceof IASTCompoundStatement )
+					if(	(iastNode instanceof IASTCompoundStatement) 
+					||	(iastNode instanceof CPPASTNamespaceDefinition) )
 					{
 						System.out.println( "recurrent :C" );
 						curNode.children = createPDEVizNodeTree(iastNode, doc, comments);

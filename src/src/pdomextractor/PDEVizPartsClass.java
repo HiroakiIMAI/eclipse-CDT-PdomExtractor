@@ -18,6 +18,7 @@ import org.eclipse.cdt.core.dom.ast.IASTLiteralExpression;
 import org.eclipse.cdt.core.dom.ast.IASTName;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IBinding;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTNamespaceDefinition;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.text.IDocument;
@@ -187,8 +188,6 @@ public class PDEVizPartsClass {
 				// 何もしない
 			}
 		}
-		
-		
 		//-----------------------
 		// Try to extract NodeText
 		//-----------------------
@@ -197,6 +196,7 @@ public class PDEVizPartsClass {
 			IASTFileLocation nodeLoc = node.getFileLocation();
 			TextSelection selNodeTxt;
 			
+			// ifStatement の特別処理
 			if( node instanceof IASTIfStatement )
 			{
 				IASTIfStatement ifNode = (IASTIfStatement) node;
@@ -210,11 +210,20 @@ public class PDEVizPartsClass {
 				
 				nodeText = "if (" + selNodeTxt.getText() + ")";
 			}
-			else
+			// 無名Compoundの特別処理
+			else if( node instanceof IASTCompoundStatement )
+			{
+				nodeText = "{} unnamed compound";
+			}
+			// 無名Compoundの特別処理
+			else if( node instanceof CPPASTNamespaceDefinition )
+			{
+				nodeText = "namespace";
+			}
 			// 子要素にCompoundが含まれる場合は、
 			// inlineCommentが始まるまでをnodeTextとする。
 			// (現時点では、複数行にわたるif文などの正確な抽出は諦める)
-			if( flag_haveCompound )
+			else if( flag_haveCompound )
 			{
 //				int extLength = nodeLoc.getNodeLength(); 
 //				if( inlineComments.size() != 0 )
