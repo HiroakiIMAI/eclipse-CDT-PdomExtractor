@@ -11,7 +11,10 @@ import org.eclipse.cdt.core.dom.ast.IASTFunctionDefinition;
 import org.eclipse.cdt.core.dom.ast.IASTIfStatement;
 import org.eclipse.cdt.core.dom.ast.IASTNode;
 import org.eclipse.cdt.core.dom.ast.IASTStatement;
+import org.eclipse.cdt.core.dom.ast.cpp.ICPPASTCatchHandler;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTCatchHandler;
 import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTNamespaceDefinition;
+import org.eclipse.cdt.internal.core.dom.parser.cpp.CPPASTTryBlockStatement;
 import org.eclipse.cdt.internal.ui.editor.CDocumentProvider;
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.filebuffers.ITextFileBuffer;
@@ -137,6 +140,46 @@ public class PDEVizNodeClass {
 						{	
 							TreatElseClause(vizTree, (IASTCompoundStatement)elseClause, doc, comments);
 						}
+					}
+				}
+				//----------------------------------------------------------------------------------
+				// Try節 だった場合 Catch節の構造に対応するために特別処理を実施する
+				// 
+				// [Eclipse CDT AST仕様]
+				// Try Statement の子要素として、CatchStatement が存在する。
+				// 
+				// [PDEの出力仕様]
+				// Catch節のStatementをTry節と同じ階層に出力する。
+				// 
+				//----------------------------------------------------------------------------------
+				else if( iastNode instanceof CPPASTTryBlockStatement )
+				{
+					CPPASTTryBlockStatement tryNode = (CPPASTTryBlockStatement)iastNode;
+					// try StatementのPDEノード化
+					PDEVizNodeClass pdeNode = new PDEVizNodeClass();
+					pdeNode.node = tryNode;
+					pdeNode.vizParts = new PDEVizPartsClass(tryNode, doc, comments, lNum_prvNd, lNum_nxtNd);
+					
+					// try節のCompoundをノード化するための再帰する
+					pdeNode.children = createPDEVizNodeTree(tryNode.getTryBody(), doc, comments);
+					
+					// try節のPDEノードをtopNodeレイヤーのPDEノードリストに追加
+					vizTree.add( pdeNode );
+					
+					// catch節の処理(複数の可能性あり)
+					ICPPASTCatchHandler[] catchNodes = tryNode.getCatchHandlers();
+					for( ICPPASTCatchHandler catchNode: catchNodes )
+					{
+						// catch節のPDEノード化
+						pdeNode = new PDEVizNodeClass();
+						pdeNode.node = catchNode;
+						pdeNode.vizParts = new PDEVizPartsClass(catchNode, doc, comments, lNum_prvNd, lNum_nxtNd);
+						
+						//　catch節のCompoundの子要素に再帰
+						pdeNode.children = createPDEVizNodeTree(catchNode.getCatchBody(), doc, comments);
+						
+						// try節のPDEノードをtopNodeレイヤーのPDEノードリストに追加
+						vizTree.add( pdeNode );
 					}
 				}
 				//----------------------------------------------------------------------------------
